@@ -42,6 +42,22 @@ def learning_rate_factor(name, step_num, hparams):
     return in_warmup * 1 + (1 - in_warmup) * ret
   elif name == "rsqrt_decay":
     return tf.rsqrt(tf.maximum(step_num, hparams.learning_rate_warmup_steps))
+  # first follow the rsqrt_decay schedule in the 1st phase
+  # then start the cos_decay in 2nd phase
+  elif name == "rsqrt_cos_decay":
+    in_1st_phase = tf.cast(step_num <= hparams.learning_rate_1st_phase_steps,
+                           dtype=tf.float32)
+    # the same as the above "rsqrt_decay"
+    ret1 = tf.rsqrt(tf.maximum(step_num, hparams.learning_rate_warmup_steps))
+    # the highest value of lr, which is achieved at the end of 1st phase
+    maximum = tf.rsqrt(hparams.learning_rate_1st_phase_steps)
+    # start cos_decay from the maximum lr value
+    # note that we subtract `1st_phase_steps` to start cos_decay
+    ret2 = maximum * 0.5 * (1 + tf.cos(
+      np.pi * (step_num - hparams.learning_rate_1st_phase_steps)
+      / hparams.learning_rate_decay_steps))
+    # if in 1st phase return ret1 else return ret2
+    return in_1st_phase * ret1 + (1 - in_1st_phase) * ret2
   elif name == "rsqrt_normalized_decay":
     scale = tf.sqrt(tf.to_float(hparams.learning_rate_warmup_steps))
     return scale * tf.rsqrt(tf.maximum(
